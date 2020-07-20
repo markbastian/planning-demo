@@ -1,19 +1,25 @@
-(ns planning-demo.app
+;(shadow.cljs.devtools.api/nrepl-select :app)
+(ns planning-demos.app
   (:require [planning.core :as p]
             [planning.utils :as u]
-            [tailrecursion.priority-map :refer [priority-map]]
-            [reagent.core :as reagent :refer [atom cursor]]
-            [cljsjs.hammer]
-            [clojure.string :as cs]))
+            [reagent.core :as r]
+            [reagent.dom :as rd]))
+
+;https://github.com/reagent-project/reagent
+;https://reagent-project.github.io
+;https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/Events
+;https://developer.mozilla.org/en-US/docs/Web/API/Touch_events
+;https://reactjs.org/docs/events.html#touch-events
+;https://www.javascripture.com/Touch
 
 (def cost '{🌲 1 🌳 1.5 🌴 2 ⛰ 5 🌋 10})
 
 (def cell-dim 24)
 (def grid-size 12)
 
-(def state (atom {:grid (vec (repeat grid-size (vec (repeat grid-size '🌲))))}))
+(def state (r/atom {:grid (vec (repeat grid-size (vec (repeat grid-size '🌲))))}))
 
-(defn A*-meadow-search [{:keys [grid start goal] :as m}]
+(defn A-star-meadow-search [{:keys [grid start goal] :as m}]
   (when (and start goal)
     (p/A-star-search
       (assoc m
@@ -23,7 +29,7 @@
 
 (defn render-path [state]
   (doall
-    (for [[i j] (A*-meadow-search @state)]
+    (for [[i j] (A-star-meadow-search @state)]
       [:circle {:key    (str "step:" i ":" j)
                 :cx     (* (+ i 0.5) cell-dim)
                 :cy     (* (+ j 0.5) cell-dim)
@@ -32,7 +38,7 @@
                 :fill   :gray}])))
 
 (defn render-goal [state state-key emoji]
-  (let [goal (cursor state [state-key])]
+  (let [goal (r/cursor state [state-key])]
     (fn []
       (let [[i j] @goal]
         (when @goal
@@ -42,7 +48,7 @@
            emoji])))))
 
 (defn add-paintbrush [state brush]
-  (let [paintbrush (cursor state [:paintbrush])
+  (let [paintbrush (r/cursor state [:paintbrush])
         x (double (/ (* cell-dim grid-size) (count cost)))]
     (fn []
       [:svg {:width x :height cell-dim}
@@ -55,26 +61,22 @@
                            (swap! state dissoc :paintbrush))}
         (str brush)]])))
 
-;https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/Events
-;https://developer.mozilla.org/en-US/docs/Web/API/Touch_events
-;https://reactjs.org/docs/events.html#touch-events
-;https://www.javascripture.com/Touch
 (defn render [state]
-  (let [grid (cursor state [:grid])
-        paintbrush (cursor state [:paintbrush])
-        dragging (atom false)
+  (let [grid (r/cursor state [:grid])
+        paintbrush (r/cursor state [:paintbrush])
+        dragging (r/atom false)
         w (count @grid)
         h (count (first @grid))]
     (fn []
       ;https://stackoverflow.com/questions/9251590/prevent-page-scroll-on-drag-in-ios-and-android
       [:div.no-bounce {:style {:cursor :pointer :user-select :none}}
-       [:svg#foo {:width        (* cell-dim w)
-                  :height       (* cell-dim h)
-                  :onTouchStart #(reset! dragging true)
-                  :onTouchEnd   #(reset! dragging false)
-                  :onMouseDown  #(reset! dragging true)
-                  :onMouseUp    #(reset! dragging false)
-                  :onMouseLeave #(reset! dragging false)}
+       [:svg#grid {:width        (* cell-dim w)
+                   :height       (* cell-dim h)
+                   :onTouchStart #(reset! dragging true)
+                   :onTouchEnd   #(reset! dragging false)
+                   :onMouseDown  #(reset! dragging true)
+                   :onMouseUp    #(reset! dragging false)
+                   :onMouseLeave #(reset! dragging false)}
         [:rect {:width (* w cell-dim) :height (* h cell-dim) :fill :green}]
         (render-path state)
         (doall
@@ -86,7 +88,6 @@
                     :data-j      j
                     :onMouseOver #(when (and @dragging @paintbrush)
                                     (swap! grid assoc-in [i j] @paintbrush))
-                    ;This is why we can't have nice things in JavaScript :( TouchEvent = UGH!!!
                     :onTouchMove (fn [event]
                                    (when (and @dragging @paintbrush)
                                      (let [touch (.item (.-touches event) 0)
@@ -109,25 +110,13 @@
         [render-goal state :goal '🗃️]]
        [:div
         [:span
-         (doall (for [k ["\uD83C\uDF32" "\uD83C\uDF33" "\uD83C\uDF34" "\u26F0\uFE0F" "\uD83C\uDF0B"]]
+         (doall (for [k ['🌲 '🌳 '🌴 '⛰ '🌋]]
                   ^{:key k} [add-paintbrush state k]))]]])))
 
-(when-let [app-context (. js/document (getElementById "app"))]
-  (let [state state
-        mc (js/Hammer. app-context)]
-    (do
-      (.on mc "panleft panright tap press" (fn [e]
-                                             (prn e)
-                                             (prn "eafs")))
-      (reagent/render-component
-        [render state]
-        app-context))))
+(defn ^:dev/after-load ui-root []
+  (rd/render [render state] (.getElementById js/document "ui-root")))
 
-;Try this - It prevents ALL touches, but might be close to right.
-;https://stackoverflow.com/questions/16348031/disable-scrolling-when-touch-moving-certain-element
-
-;;This doesn't seem to work
-;(. js/document (addEventListener
-;                 "touchmove"
-;                 (fn [e] (.preventDefault e))
-;                 {:passive false}))
+(defn init []
+  (let [root (.getElementById js/document "ui-root")]
+    (.log js/console root)
+    (rd/render [render state] root)))

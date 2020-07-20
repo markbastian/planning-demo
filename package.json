@@ -5,5 +5,9 @@
   "devDependencies": {
     "shadow-cljs": "2.10.15"
   },
-  "dependencies": {}
+  "dependencies": {
+    "create-react-class": "^15.6.3",
+    "react": "^16.13.1",
+    "react-dom": "^16.13.1"
+  }
 }
